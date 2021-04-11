@@ -1,0 +1,194 @@
+---
+output:
+  html_notebook: default
+  html_document: default
+---
+Packages required for Regularized regression
+
+```{r}
+set.seed(123)    # seef for reproducibility
+library(glmnet)  # for ridge regression
+library(dplyr)   # for data cleaning
+library(psych)   # for function tr() to compute trace of a matrix
+library(caret)
+```
+
+Import Dataset from package 'MASS'
+
+```{r}
+data("Boston", package = "MASS")
+head(Boston)
+```
+Preparing the data and We randomly split the data into training set (80% for building a predictive model) and test set (20% for evaluating the model).
+```{r}
+set.seed(123)
+training.samples <- Boston$medv %>%
+  createDataPartition(p = 0.8, list = FALSE)
+train.data  <- Boston[training.samples, ]
+test.data <- Boston[-training.samples, ]
+```
+
+We need to create two objects X for holding predictor variables
+```{r}
+X = model.matrix(medv ~ ., train.data)[, -1]
+```
+
+y for storing the outcome variable
+
+```{r}
+y = train.data$medv
+```
+
+Computing Ridge regression model
+```{r}
+par(mfrow = c(1, 2))
+fit_ridge = glmnet(X, y, alpha = 0)
+plot(fit_ridge)
+mtext("Ridge")
+plot(fit_ridge, xvar = "lambda", label = TRUE)
+mtext("Ridge")
+```
+
+
+
+```{r}
+cv_ridge = cv.glmnet(X, y, alpha = 0)
+plot(cv_ridge)
+mtext("Ridge")
+```
+```{r}
+cv_ridge$lambda.min
+```
+
+
+```{r}
+# Fit the final model on the training data
+model_ridge <- train(
+  medv ~., data = train.data, method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  tuneGrid = expand.grid(alpha = 0, lambda = cv_ridge$lambda.min)
+  )
+# Model coefficients
+coef(model_ridge$finalModel, model_ridge$bestTune$lambda)
+```
+
+
+
+```{r}
+# Make predictions on the test data
+x.test <- model.matrix(medv ~., test.data)[,-1]
+predictions <- model_ridge %>% predict(x.test) %>% as.vector()
+# Model performance metrics
+data.frame(
+  RMSE = RMSE(predictions, test.data$medv),
+  Rsquare = R2(predictions, test.data$medv)
+)
+```
+Computing Lasso regression model
+```{r}
+set.seed(123)
+par(mfrow = c(1, 2))
+fit_lasso = glmnet(X, y, alpha = 1)
+plot(fit_lasso)
+mtext("LASSO")
+plot(fit_lasso, xvar = "lambda", label = TRUE)
+mtext("LASSO")
+```
+
+```{r}
+
+cv_lasso = cv.glmnet(X, y, alpha = 1)
+plot(cv_lasso)
+mtext("LASSO")
+```
+
+```{r}
+cv_lasso$lambda.min
+```
+
+```{r}
+# Fit the final model on the training data
+model_lasso <- train(
+  medv ~., data = train.data, method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  tuneGrid = expand.grid(alpha = 1, lambda = cv_lasso$lambda.min)
+  )
+# Model coefficients
+coef(model_lasso$finalModel, model_lasso$bestTune$lambda)
+```
+
+```{r}
+x.test <- model.matrix(medv ~., test.data)[,-1]
+predictions <- model_lasso %>% predict(x.test) %>% as.vector()
+# Model performance metrics
+data.frame(
+  RMSE = RMSE(predictions, test.data$medv),
+  Rsquare = R2(predictions, test.data$medv)
+)
+```
+Computing Elastic net regression model
+```{r}
+set.seed(123)
+model_elastic <- train(
+  medv ~., data = train.data, method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10
+)
+# Best tuning parameter
+model_elastic$bestTune
+
+coef(model_elastic$finalModel, model_elastic$bestTune$lambda)
+```
+
+```{r}
+par(mfrow = c(1, 2))
+fit_elastic = glmnet(X, y, alpha = 0.1)
+plot(fit_elastic)
+mtext("Elastic net")
+plot(fit_elastic, xvar = "lambda", label = TRUE)
+mtext("Elastic net")
+```
+
+```{r}
+cv_elastic = cv.glmnet(X, y, alpha = 0.1)
+plot(cv_elastic)
+mtext("Elastic net")
+```
+
+
+```{r}
+x.test <- model.matrix(medv ~., test.data)[,-1]
+predictions <- model_elastic %>% predict(x.test)
+# Model performance metrics
+data.frame(
+  RMSE = RMSE(predictions, test.data$medv),
+  Rsquare = R2(predictions, test.data$medv)
+)
+```
+
+
+
+Comparing model performance
+
+
+```{r}
+models <- list(ridge = model_ridge, lasso = model_lasso, elastic = model_elastic)
+resamples(models) %>% summary( metric = "RMSE")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
